@@ -26,7 +26,6 @@ override.tf.json
 # Local environment
 local/.env
 .env
-.env.*
 
 # IDE
 .idea/
