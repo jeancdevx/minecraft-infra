@@ -1,0 +1,48 @@
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+.terraform.lock.hcl
+
+# Minecraft data (local development)
+local/data/
+
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Terraform variables (contain secrets)
+*.tfvars
+!*.tfvars.example
+
+# Cloud Function artifacts
+**/*.zip
+**/function.zip
+
+# Local environment
+local/.env
+.env
+.env.*
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# SSH keys
+*.pem
+*.key
+id_rsa*
