@@ -1,0 +1,25 @@
+# Minecraft Server - Dev Environment
+# Copy to terraform.tfvars and configure
+
+# === REQUIRED ===
+project_id    = "your-gcp-project-id"
+rcon_password = "your-secure-rcon-password"
+
+# === RECOMMENDED ===
+ops_player = "YourMinecraftUsername"
+
+# === OPTIONAL (defaults shown) ===
+# region            = "us-central1"
+# zone              = "us-central1-a"
+# machine_type      = "e2-standard-4"
+# disk_size_gb      = 50
+# minecraft_version = "1.16.5"
+# server_type       = "PAPER"
+# memory            = "10G"
+# max_players       = 8
+# difficulty        = "hard"
+# hardcore          = true
+# view_distance     = 12
+# motd              = "§6⚔ §lHardcore Survival §6⚔"
+# whitelist_enabled = true
+# world_seed        = ""
