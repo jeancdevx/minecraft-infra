@@ -72,10 +72,21 @@ variable "game_source_ranges" {
   default     = ["0.0.0.0/0"]
 }
 
+variable "java_image_tag" {
+  description = "Docker image tag for Java version (java16, java17, java21, latest)"
+  type        = string
+  default     = "java21"
+
+  validation {
+    condition     = contains(["java8", "java11", "java16", "java17", "java21", "latest"], var.java_image_tag)
+    error_message = "Java image tag must be java8, java11, java16, java17, java21, or latest."
+  }
+}
+
 variable "minecraft_version" {
   description = "Minecraft version"
   type        = string
-  default     = "1.16.5"
+  default     = "LATEST"
 }
 
 variable "server_type" {

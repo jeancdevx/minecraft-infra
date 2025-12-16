@@ -5,6 +5,7 @@ set -e
 MC_DIR="/opt/minecraft"
 BACKUP_BUCKET="${backup_bucket}"
 AUTO_SHUTDOWN_MINUTES="${auto_shutdown_minutes}"
+JAVA_IMAGE_TAG="${java_image_tag}"
 
 MINECRAFT_VERSION="${minecraft_version}"
 SERVER_TYPE="${server_type}"
@@ -60,7 +61,7 @@ create_compose_file() {
   cat > "$MC_DIR/docker-compose.yml" << EOF
 services:
   minecraft:
-    image: itzg/minecraft-server:java16
+    image: itzg/minecraft-server:$JAVA_IMAGE_TAG
     container_name: minecraft-server
     ports:
       - "25565:25565"

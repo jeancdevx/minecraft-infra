@@ -69,6 +69,7 @@ module "compute" {
     whitelist_enabled     = var.whitelist_enabled
     backup_bucket         = module.storage.bucket_name
     auto_shutdown_minutes = var.auto_shutdown_minutes
+    java_image_tag        = var.java_image_tag
   })
 
   metadata = {

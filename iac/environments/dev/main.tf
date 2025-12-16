@@ -13,6 +13,7 @@ module "minecraft" {
 
   auto_shutdown_minutes = var.auto_shutdown_minutes
 
+  java_image_tag    = var.java_image_tag
   minecraft_version = var.minecraft_version
   server_type       = var.server_type
   memory            = var.memory

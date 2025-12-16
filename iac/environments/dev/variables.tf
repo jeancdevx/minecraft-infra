@@ -45,10 +45,16 @@ variable "auto_shutdown_minutes" {
   default     = 15
 }
 
-variable "minecraft_version" {
-  description = "Minecraft version"
+variable "java_image_tag" {
+  description = "Docker image tag for Java version"
   type        = string
-  default     = "1.16.5"
+  default     = "java21"
+}
+
+variable "minecraft_version" {
+  description = "Minecraft version (e.g., 1.21.4 or LATEST)"
+  type        = string
+  default     = "LATEST"
 }
 
 variable "server_type" {
