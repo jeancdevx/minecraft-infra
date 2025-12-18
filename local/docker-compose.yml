@@ -1,45 +1,37 @@
 services:
-  mc:
-    image: itzg/minecraft-server:java16
-    container_name: mc-local
+  minecraft:
+    image: itzg/minecraft-server:java21
+    container_name: minecraft-server
     ports:
       - "25565:25565"   # Minecraft
       - "25575:25575"   # RCON (para watchdog)
     environment:
-      # === Core ===
       EULA: "TRUE"
-      VERSION: "1.16.5"
+      VERSION: "1.21.11"
       TYPE: "PAPER"
 
-      # === Recursos ===
-      # Local: 4G (tu PC), GCP: 10G (VM e2-standard-4)
       MEMORY: ${MEMORY:-4G}
       USE_AIKAR_FLAGS: "true"
-
-      # === Gameplay Hardcore ===
       DIFFICULTY: "hard"
-      HARDCORE: "true"
+      
+      HARDCORE: "false"
       MAX_PLAYERS: "8"
       VIEW_DISTANCE: "12"
       SPAWN_PROTECTION: "0"
       PVP: "true"
       ALLOW_NETHER: "true"
       GENERATE_STRUCTURES: "true"
-
-      # === Personalización ===
+      
       MOTD: "§6⚔ §lHardcore Survival §6⚔\n§7¡Bienvenido al desafío!"
-
-      # === Seguridad ===
+      
       WHITELIST: ${WHITELIST:-false}
       OPS: ${OPS_PLAYER:-}
       ENFORCE_WHITELIST: "true"
 
-      # === RCON (necesario para watchdog on-demand) ===
       ENABLE_RCON: "true"
       RCON_PASSWORD: ${RCON_PASSWORD:-minecraft}
       RCON_PORT: "25575"
 
-      # === Mundo ===
       LEVEL: "world"
       SEED: ${WORLD_SEED:-}
       MAX_WORLD_SIZE: "29999984"
