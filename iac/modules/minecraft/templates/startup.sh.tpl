@@ -85,6 +85,8 @@ install_docker() {
   systemctl enable docker
   systemctl start docker
 
+  sudo usermod -aG docker $USER
+
   log "Docker installed successfully"
 }
 

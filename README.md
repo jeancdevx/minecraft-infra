@@ -1,114 +1,120 @@
-# Minecraft Hardcore Server - Google Cloud
+# Minecraft Server Infrastructure
 
-Servidor de Minecraft 1.16.5 **Hardcore** para 8 jugadores, desplegado en Google Cloud Platform con sistema on-demand (se enciende solo, se apaga solo).
+Servidor de Minecraft **Paper 1.21.4** desplegado en Google Cloud Platform con sistema on-demand, backups automáticos y bot de Discord para control.
 
-## 🎯 Características
+## Características
 
-- **Modo Hardcore** - Una vida, máxima emoción
-- **PaperMC** - Rendimiento optimizado + plugins
-- **On-Demand** - Solo paga cuando juegas
-- **Backups automáticos** - Nunca pierdas tu mundo
-- **IP/Dominio propio** - Fácil de recordar
+- **Paper 1.21.4** con Java 21
+- **On-Demand** - Se enciende/apaga automáticamente
+- **Disco Persistente** - El mundo sobrevive recreaciones de VM
+- **Backups Automáticos** - Cada 4 horas a Cloud Storage
+- **Bot de Discord** - Control del servidor con `/server start|stop|status`
+- **Auto-shutdown** - Se apaga después de 15 minutos sin jugadores
 
-## 📊 Especificaciones
+## Arquitectura
 
-| Recurso | Valor |
-|---------|-------|
-| VM | e2-standard-4 (4 vCPU, 16GB RAM) |
-| Memoria Minecraft | 10GB |
-| Jugadores | 8 simultáneos |
-| View Distance | 12 chunks |
-| Región | us-central1 (o cercana) |
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        Google Cloud Platform                     │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  ┌──────────────┐    ┌──────────────────────────────────────┐   │
+│  │   Discord    │    │         Compute Engine                │   │
+│  │   Bot (CF)   │───▶│  ┌────────────────────────────────┐  │   │
+│  └──────────────┘    │  │     minecraft-server (VM)      │  │   │
+│                      │  │  ┌────────────────────────┐    │  │   │
+│  ┌──────────────┐    │  │  │   Docker Container     │    │  │   │
+│  │   Starter    │───▶│  │  │   itzg/minecraft:java21│    │  │   │
+│  │   API (CF)   │    │  │  └────────────────────────┘    │  │   │
+│  └──────────────┘    │  │            ▲                   │  │   │
+│                      │  │            │ mount             │  │   │
+│                      │  │  ┌─────────┴────────┐          │  │   │
+│                      │  │  │ /mnt/minecraft-  │          │  │   │
+│                      │  │  │ data (50GB SSD)  │          │  │   │
+│                      │  │  └──────────────────┘          │  │   │
+│                      │  └────────────────────────────────┘  │   │
+│                      └──────────────────────────────────────┘   │
+│                                                                  │
+│  ┌─────────────────────────────────────────────┐                │
+│  │              Cloud Storage                   │                │
+│  │  ┌─────────────────┐  ┌─────────────────┐   │                │
+│  │  │ config bucket   │  │ backups bucket  │   │                │
+│  │  │ - plugins/      │  │ - world backups │   │                │
+│  │  │ - scripts/      │  └─────────────────┘   │                │
+│  │  └─────────────────┘                        │                │
+│  └─────────────────────────────────────────────┘                │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
 
-## 💰 Costos Estimados
-
-Con créditos GCP (~$270 USD, expiran Feb 2026):
-
-| Componente | Costo/mes |
-|------------|-----------|
-| VM (on-demand ~4h/día) | ~$18 |
-| Storage + Backups | ~$1 |
-| **Total** | **~$19/mes** |
-
-**Duración:** ~14 meses con créditos
-
----
-
-## 🗺️ Roadmap
-
-### ✅ Fase 0 - Preparación
-- [x] Cuenta GCP configurada
-- [x] Docker instalado localmente
-- [x] Repositorio creado
-
-### ✅ Fase 1 - Servidor Local
-- [x] Docker Compose con PaperMC
-- [x] Modo Hardcore configurado
-- [x] Variables de entorno
-- [x] Documentación local
-
-### 🔄 Fase 2 - Deploy en GCP
-- [ ] Crear proyecto GCP
-- [ ] Terraform: VM e2-standard-4
-- [ ] Terraform: Firewall (25565/tcp)
-- [ ] Terraform: IP estática
-- [ ] Script de startup
-
-### ⏳ Fase 3 - Persistencia
-- [ ] Disco persistente SSD
-- [ ] Cloud Storage para backups
-- [ ] Script de backup automático
-- [ ] Política de snapshots
-
-### ⏳ Fase 4 - On-Demand
-- [ ] Cloud Function: start-server
-- [ ] Cloud Function: stop-server (watchdog)
-- [ ] Cloud Scheduler
-- [ ] DNS (opcional)
-
-### ⏳ Fase 5 - Personalización
-- [ ] Plugins: EssentialsX, LuckPerms
-- [ ] Mensajes de bienvenida
-- [ ] Efectos y títulos
-- [ ] Sistema de rankings
-
----
-
-## 📁 Estructura del Proyecto
+## Estructura del Proyecto
 
 ```
 minecraft-infra/
-├── README.md                 # Este archivo
-├── local/
-│   ├── docker-compose.yml    # Servidor local
-│   ├── .env.example          # Variables de ejemplo
-│   └── README.md             # Docs locales
-└── infra/
-    └── gcp/                  # (Próximamente)
-        ├── main.tf
-        ├── variables.tf
-        └── functions/
+├── README.md                    # Este archivo
+├── local/                       # Desarrollo local
+│   ├── docker-compose.yml       # Servidor local
+│   ├── .env.example             # Variables de ejemplo
+│   └── README.md                # Documentación local
+└── iac/                         # Infrastructure as Code
+    ├── environments/
+    │   └── dev/                 # Ambiente de desarrollo
+    │       ├── main.tf
+    │       ├── variables.tf
+    │       └── terraform.tfvars
+    └── modules/
+        ├── minecraft/           # Módulo principal
+        │   ├── templates/
+        │   │   └── startup.sh.tpl
+        │   └── scripts/
+        │       ├── backup.sh
+        │       └── autoshutdown.sh
+        ├── compute/             # VM
+        ├── network/             # Firewall, IP
+        ├── storage/             # Buckets, disco
+        ├── discord/             # Bot de Discord
+        │   └── src/
+        │       └── index.js
+        └── starter/             # API HTTP starter
 ```
 
----
+## Guías
 
-## 🚀 Inicio Rápido (Local)
+- [Desarrollo Local](./local/README.md)
+- [Despliegue en Cloud](./iac/README.md)
+- [Operaciones](./docs/OPERATIONS.md)
+
+## Quick Start
+
+### Opción 1: Local (desarrollo)
 
 ```bash
 cd local
 cp .env.example .env
-# Editar .env con tu usuario
 docker compose up -d
-docker compose logs -f mc
+# Conectar a localhost:25565
 ```
 
-Conectar: `localhost:25565` (Minecraft 1.16.5)
+### Opción 2: Cloud (producción)
 
----
+```bash
+cd iac/environments/dev
+terraform init
+terraform apply
+# Conectar a la IP mostrada en el output
+```
 
-## 🔗 Referencias
+## Costos Estimados (GCP)
 
-- [itzg/minecraft-server](https://docker-minecraft-server.readthedocs.io/) - Imagen Docker
-- [PaperMC](https://papermc.io/) - Servidor optimizado
-- [Aikar's Flags](https://docs.papermc.io/paper/aikars-flags) - Optimización JVM
-- [GCP Free Tier](https://cloud.google.com/free) - Créditos gratuitos
+| Componente | Costo/hora | Costo/mes (4h/día) |
+|------------|------------|-------------------|
+| VM e2-standard-4 | ~$0.13 | ~$16 |
+| Disco 50GB SSD | - | ~$8 |
+| Storage backups | - | ~$1 |
+| **Total** | | **~$25/mes** |
+
+## Recursos
+
+- [itzg/minecraft-server](https://docker-minecraft-server.readthedocs.io/)
+- [PaperMC](https://papermc.io/)
+- [Terraform GCP Provider](https://registry.terraform.io/providers/hashicorp/google/latest/docs)

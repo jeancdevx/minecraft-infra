@@ -22,7 +22,16 @@ docker exec minecraft-server rcon-cli save-all || true
 sleep 5
 
 cd "$DATA_DIR"
-tar -czf "/tmp/$BACKUP_FILE" world
+
+# Backup all dimensions that exist
+FOLDERS_TO_BACKUP=""
+[ -d "world" ] && FOLDERS_TO_BACKUP="$FOLDERS_TO_BACKUP world"
+[ -d "world_nether" ] && FOLDERS_TO_BACKUP="$FOLDERS_TO_BACKUP world_nether"
+[ -d "world_the_end" ] && FOLDERS_TO_BACKUP="$FOLDERS_TO_BACKUP world_the_end"
+[ -d "plugins" ] && FOLDERS_TO_BACKUP="$FOLDERS_TO_BACKUP plugins"
+
+log "Backing up: $FOLDERS_TO_BACKUP"
+tar -czf "/tmp/$BACKUP_FILE" $FOLDERS_TO_BACKUP
 
 docker exec minecraft-server rcon-cli save-on || true
 
