@@ -30,3 +30,26 @@ variable "labels" {
   type        = map(string)
   default     = {}
 }
+
+variable "create_data_disk" {
+  description = "Whether to create a persistent data disk"
+  type        = bool
+  default     = true
+}
+
+variable "zone" {
+  description = "Zone for the data disk (must match VM zone)"
+  type        = string
+}
+
+variable "data_disk_size_gb" {
+  description = "Size of the persistent data disk in GB"
+  type        = number
+  default     = 50
+}
+
+variable "data_disk_type" {
+  description = "Type of the persistent data disk"
+  type        = string
+  default     = "pd-ssd"
+}
