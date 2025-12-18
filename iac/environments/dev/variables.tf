@@ -84,7 +84,7 @@ variable "difficulty" {
 variable "hardcore" {
   description = "Enable hardcore mode"
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "view_distance" {
