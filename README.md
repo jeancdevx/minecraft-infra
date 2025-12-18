@@ -82,6 +82,7 @@ minecraft-infra/
 
 - [Desarrollo Local](./local/README.md)
 - [Despliegue en Cloud](./iac/README.md)
+- [Configuración Discord Bot](./docs/DISCORD_BOT.md)
 - [Operaciones](./docs/OPERATIONS.md)
 
 ## Quick Start
