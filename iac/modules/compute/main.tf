@@ -15,6 +15,15 @@ resource "google_compute_instance" "this" {
     }
   }
 
+  dynamic "attached_disk" {
+    for_each = var.attached_disk_source != null ? [1] : []
+    content {
+      source      = var.attached_disk_source
+      device_name = var.attached_disk_device_name
+      mode        = "READ_WRITE"
+    }
+  }
+
   network_interface {
     network    = var.network
     subnetwork = var.subnetwork
@@ -47,8 +56,7 @@ resource "google_compute_instance" "this" {
   allow_stopping_for_update = var.allow_stopping_for_update
 
   lifecycle {
-    ignore_changes = [
-      metadata_startup_script,
-    ]
+    # Startup script changes will update the VM metadata on next terraform apply
+    # The script runs on every boot and will use the new values
   }
 }

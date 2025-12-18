@@ -135,3 +135,15 @@ variable "allow_stopping_for_update" {
   type        = bool
   default     = true
 }
+
+variable "attached_disk_source" {
+  description = "Self link of disk to attach (optional)"
+  type        = string
+  default     = null
+}
+
+variable "attached_disk_device_name" {
+  description = "Device name for attached disk"
+  type        = string
+  default     = "minecraft-data"
+}
