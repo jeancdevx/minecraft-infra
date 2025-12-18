@@ -33,6 +33,10 @@ module "storage" {
   retention_days        = var.backup_retention_days
   service_account_email = "${data.google_project.current.number}-compute@developer.gserviceaccount.com"
 
+  zone              = var.zone
+  create_data_disk  = true
+  data_disk_size_gb = var.disk_size_gb
+
   labels = local.labels
 }
 
@@ -68,6 +72,7 @@ module "compute" {
     world_seed            = var.world_seed
     whitelist_enabled     = var.whitelist_enabled
     backup_bucket         = module.storage.bucket_name
+    config_bucket         = module.storage.config_bucket_name
     auto_shutdown_minutes = var.auto_shutdown_minutes
     java_image_tag        = var.java_image_tag
   })
@@ -75,6 +80,8 @@ module "compute" {
   metadata = {
     enable-oslogin = "TRUE"
   }
+
+  attached_disk_source = module.storage.data_disk_self_link
 
   labels = local.labels
 

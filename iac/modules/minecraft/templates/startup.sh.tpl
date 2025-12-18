@@ -3,7 +3,10 @@
 set -e
 
 MC_DIR="/opt/minecraft"
+DATA_DIR="/mnt/minecraft-data"
+DATA_DISK_DEVICE="/dev/disk/by-id/google-minecraft-data"
 BACKUP_BUCKET="${backup_bucket}"
+CONFIG_BUCKET="${config_bucket}"
 AUTO_SHUTDOWN_MINUTES="${auto_shutdown_minutes}"
 JAVA_IMAGE_TAG="${java_image_tag}"
 
@@ -23,6 +26,38 @@ WORLD_SEED="${world_seed}"
 log() {
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
 }
+
+mount_data_disk() {
+  log "Setting up data disk..."
+  
+  mkdir -p "$DATA_DIR"
+  
+  if [ ! -e "$DATA_DISK_DEVICE" ]; then
+    log "Data disk not found at $DATA_DISK_DEVICE, using local storage"
+    DATA_DIR="$MC_DIR/data"
+    mkdir -p "$DATA_DIR"
+    return 0
+  fi
+  
+  if mountpoint -q "$DATA_DIR"; then
+    log "Data disk already mounted at $DATA_DIR"
+    return 0
+  fi
+  
+  if ! blkid "$DATA_DISK_DEVICE" | grep -q "TYPE="; then
+    log "Formatting data disk..."
+    mkfs.ext4 -F "$DATA_DISK_DEVICE"
+  fi
+  
+  mount "$DATA_DISK_DEVICE" "$DATA_DIR"
+  
+  if ! grep -q "minecraft-data" /etc/fstab; then
+    echo "$DATA_DISK_DEVICE $DATA_DIR ext4 defaults,nofail 0 2" >> /etc/fstab
+  fi
+  
+  log "Data disk mounted at $DATA_DIR"
+}
+
 
 install_docker() {
   if command -v docker &> /dev/null; then
@@ -56,7 +91,8 @@ install_docker() {
 create_compose_file() {
   log "Creating docker-compose.yml..."
   
-  mkdir -p "$MC_DIR/data"
+  mkdir -p "$MC_DIR"
+  mkdir -p "$DATA_DIR"
 
   cat > "$MC_DIR/docker-compose.yml" << EOF
 services:
@@ -91,194 +127,68 @@ services:
       SEED: "$WORLD_SEED"
       MAX_WORLD_SIZE: "29999984"
     volumes:
-      - ./data:/data
+      - $DATA_DIR:/data
     restart: unless-stopped
 EOF
 
-  log "docker-compose.yml created"
+  log "docker-compose.yml created (data at $DATA_DIR)"
 }
 
 install_plugins() {
-  log "Installing plugins..."
+  log "Syncing plugins from GCS..."
   
-  PLUGINS_DIR="$MC_DIR/data/plugins"
+  PLUGINS_DIR="$DATA_DIR/plugins"
   mkdir -p "$PLUGINS_DIR"
   
-  # EssentialsX (commands: /home, /spawn, /tpa, /msg, etc.)
-  if [ ! -f "$PLUGINS_DIR/EssentialsX.jar" ]; then
-    log "Downloading EssentialsX..."
-    curl -L -o "$PLUGINS_DIR/EssentialsX.jar" \
-      "https://github.com/EssentialsX/Essentials/releases/download/2.19.7/EssentialsX-2.19.7.jar"
-  fi
-  
-  # EssentialsX Chat (chat formatting)
-  if [ ! -f "$PLUGINS_DIR/EssentialsXChat.jar" ]; then
-    log "Downloading EssentialsX Chat..."
-    curl -L -o "$PLUGINS_DIR/EssentialsXChat.jar" \
-      "https://github.com/EssentialsX/Essentials/releases/download/2.19.7/EssentialsXChat-2.19.7.jar"
-  fi
-  
-  # EssentialsX Spawn (spawn management)
-  if [ ! -f "$PLUGINS_DIR/EssentialsXSpawn.jar" ]; then
-    log "Downloading EssentialsX Spawn..."
-    curl -L -o "$PLUGINS_DIR/EssentialsXSpawn.jar" \
-      "https://github.com/EssentialsX/Essentials/releases/download/2.19.7/EssentialsXSpawn-2.19.7.jar"
-  fi
-  
-  # Vault (economy/permissions API)
-  if [ ! -f "$PLUGINS_DIR/Vault.jar" ]; then
-    log "Downloading Vault..."
-    curl -L -o "$PLUGINS_DIR/Vault.jar" \
-      "https://github.com/milkbowl/Vault/releases/download/1.7.3/Vault.jar"
-  fi
-  
-  log "Plugins installed"
-}
-
-create_backup_script() {
-  log "Creating backup script..."
-
-  cat > "$MC_DIR/backup.sh" << 'BACKUP_EOF'
-#!/bin/bash
-set -e
-
-MC_DIR="/opt/minecraft"
-BACKUP_BUCKET="$1"
-TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-BACKUP_FILE="world-backup-$TIMESTAMP.tar.gz"
-
-log() {
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] BACKUP: $1"
-}
-
-log "Starting backup..."
-
-docker exec minecraft-server rcon-cli save-off || true
-docker exec minecraft-server rcon-cli save-all || true
-sleep 5
-
-cd "$MC_DIR/data"
-tar -czf "/tmp/$BACKUP_FILE" world
-
-docker exec minecraft-server rcon-cli save-on || true
-
-if [ -n "$BACKUP_BUCKET" ]; then
-  gsutil cp "/tmp/$BACKUP_FILE" "gs://$BACKUP_BUCKET/backups/$BACKUP_FILE"
-  log "Backup uploaded to gs://$BACKUP_BUCKET/backups/$BACKUP_FILE"
-else
-  mv "/tmp/$BACKUP_FILE" "$MC_DIR/backups/$BACKUP_FILE"
-fi
-
-rm -f "/tmp/$BACKUP_FILE"
-log "Backup completed: $BACKUP_FILE"
-BACKUP_EOF
-
-  chmod +x "$MC_DIR/backup.sh"
-  mkdir -p "$MC_DIR/backups"
-
-  log "Backup script created"
-}
-
-create_autoshutdown_script() {
-  log "Creating auto-shutdown script..."
-
-  cat > "$MC_DIR/autoshutdown.sh" << 'SHUTDOWN_EOF'
-#!/bin/bash
-# Auto-shutdown when no players for X minutes
-
-MC_DIR="/opt/minecraft"
-STATE_FILE="$MC_DIR/.empty_since"
-SHUTDOWN_AFTER_MINUTES="$1"
-
-# Skip if auto-shutdown is disabled
-if [ "$SHUTDOWN_AFTER_MINUTES" = "0" ] || [ -z "$SHUTDOWN_AFTER_MINUTES" ]; then
-  exit 0
-fi
-
-log() {
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] AUTOSHUTDOWN: $1"
-}
-
-get_player_count() {
-  # Check if container is running
-  if ! docker ps --format '{{.Names}}' | grep -q "minecraft-server"; then
-    echo "-1"
-    return
-  fi
-  
-  # Get player count via RCON (strip ANSI color codes)
-  RESULT=$(docker exec minecraft-server rcon-cli list 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g')
-  
-  if [ $? -ne 0 ] || [ -z "$RESULT" ]; then
-    echo "-1"
-    return
-  fi
-  
-  # Parse: "There are X out of maximum Y players online"
-  if echo "$RESULT" | grep -q "There are"; then
-    COUNT=$(echo "$RESULT" | awk '/There are/ {print $3}')
-    if [ -n "$COUNT" ] && [[ "$COUNT" =~ ^[0-9]+$ ]]; then
-      echo "$COUNT"
-    else
-      echo "-1"
-    fi
+  # Sync plugins from config bucket (if exists)
+  if gsutil ls "gs://$CONFIG_BUCKET/plugins/" &>/dev/null; then
+    log "Downloading plugins from gs://$CONFIG_BUCKET/plugins/..."
+    gsutil -m rsync -r "gs://$CONFIG_BUCKET/plugins/" "$PLUGINS_DIR/"
+    log "Plugins synced from GCS"
   else
-    echo "-1"
+    log "No plugins in GCS, installing defaults..."
+    
+    # EssentialsX (commands: /home, /spawn, /tpa, /msg, etc.)
+    if [ ! -f "$PLUGINS_DIR/EssentialsX.jar" ]; then
+      log "Downloading EssentialsX..."
+      curl -L -o "$PLUGINS_DIR/EssentialsX.jar" \
+        "https://github.com/EssentialsX/Essentials/releases/download/2.19.7/EssentialsX-2.19.7.jar"
+    fi
+    
+    # EssentialsX Chat (chat formatting)
+    if [ ! -f "$PLUGINS_DIR/EssentialsXChat.jar" ]; then
+      log "Downloading EssentialsX Chat..."
+      curl -L -o "$PLUGINS_DIR/EssentialsXChat.jar" \
+        "https://github.com/EssentialsX/Essentials/releases/download/2.19.7/EssentialsXChat-2.19.7.jar"
+    fi
+    
+    # EssentialsX Spawn (spawn management)
+    if [ ! -f "$PLUGINS_DIR/EssentialsXSpawn.jar" ]; then
+      log "Downloading EssentialsX Spawn..."
+      curl -L -o "$PLUGINS_DIR/EssentialsXSpawn.jar" \
+        "https://github.com/EssentialsX/Essentials/releases/download/2.19.7/EssentialsXSpawn-2.19.7.jar"
+    fi
+    
+    # Vault (economy/permissions API)
+    if [ ! -f "$PLUGINS_DIR/Vault.jar" ]; then
+      log "Downloading Vault..."
+      curl -L -o "$PLUGINS_DIR/Vault.jar" \
+        "https://github.com/milkbowl/Vault/releases/download/1.7.3/Vault.jar"
+    fi
   fi
+  
+  log "Plugins ready"
 }
 
-PLAYERS=$(get_player_count)
-
-# Validate PLAYERS is a number
-if ! [[ "$PLAYERS" =~ ^-?[0-9]+$ ]]; then
-  log "Invalid player count: '$PLAYERS', skipping check"
-  exit 0
-fi
-
-if [ "$PLAYERS" = "-1" ]; then
-  log "Server not ready, skipping check"
-  exit 0
-fi
-
-if [ "$PLAYERS" -gt 0 ]; then
-  log "Players online: $PLAYERS - resetting timer"
-  rm -f "$STATE_FILE"
-  exit 0
-fi
-
-# No players online
-if [ ! -f "$STATE_FILE" ]; then
-  date +%s > "$STATE_FILE"
-  log "No players - starting shutdown timer"
-  exit 0
-fi
-
-EMPTY_SINCE=$(cat "$STATE_FILE")
-NOW=$(date +%s)
-EMPTY_MINUTES=$(( (NOW - EMPTY_SINCE) / 60 ))
-
-log "No players for $EMPTY_MINUTES minutes (shutdown after $SHUTDOWN_AFTER_MINUTES)"
-
-if [ "$EMPTY_MINUTES" -ge "$SHUTDOWN_AFTER_MINUTES" ]; then
-  # Check if already shutting down
-  if [ -f "$MC_DIR/.shutting_down" ]; then
-    log "Shutdown already in progress"
-    exit 0
-  fi
+download_scripts() {
+  log "Downloading management scripts from GCS..."
   
-  log "Shutdown threshold reached - stopping server"
-  touch "$MC_DIR/.shutting_down"
+  gsutil cp "gs://$CONFIG_BUCKET/scripts/backup.sh" "$MC_DIR/backup.sh"
+  gsutil cp "gs://$CONFIG_BUCKET/scripts/autoshutdown.sh" "$MC_DIR/autoshutdown.sh"
   
-  # Backup before shutdown
-  "$MC_DIR/backup.sh" "$2" || true
+  chmod +x "$MC_DIR/backup.sh" "$MC_DIR/autoshutdown.sh"
   
-  # Stop the VM (use full path)
-  /sbin/shutdown -h now
-fi
-SHUTDOWN_EOF
-
-  chmod +x "$MC_DIR/autoshutdown.sh"
-  log "Auto-shutdown script created"
+  log "Scripts downloaded from GCS"
 }
 
 setup_backup_cron() {
@@ -288,8 +198,8 @@ setup_backup_cron() {
 # Minecraft world backup - every 4 hours
 0 */4 * * * root $MC_DIR/backup.sh $BACKUP_BUCKET >> /var/log/minecraft-backup.log 2>&1
 
-# Auto-shutdown check - every 5 minutes
-*/5 * * * * root $MC_DIR/autoshutdown.sh $AUTO_SHUTDOWN_MINUTES $BACKUP_BUCKET >> /var/log/minecraft-autoshutdown.log 2>&1
+# Auto-shutdown check - every 15 minutes
+*/15 * * * * root $MC_DIR/autoshutdown.sh $AUTO_SHUTDOWN_MINUTES $BACKUP_BUCKET >> /var/log/minecraft-autoshutdown.log 2>&1
 EOF
 
   chmod 644 /etc/cron.d/minecraft
@@ -311,14 +221,16 @@ start_server() {
 main() {
   log "=== Minecraft Server Startup ==="
   
+  # Mount persistent data disk first
+  mount_data_disk
+  
   # Clean up any stale shutdown flags
-  rm -f "$MC_DIR/.shutting_down" "$MC_DIR/.empty_since"
+  rm -f "$DATA_DIR/.shutting_down" "$DATA_DIR/.empty_since"
   
   install_docker
   create_compose_file
   install_plugins
-  create_backup_script
-  create_autoshutdown_script
+  download_scripts
   setup_backup_cron
   start_server
   
@@ -326,6 +238,7 @@ main() {
   
   log "=== Startup Complete ==="
   log "Server: $EXTERNAL_IP:25565"
+  log "Data: $DATA_DIR"
   log "Backups: Every 4 hours to gs://$BACKUP_BUCKET"
   log "Auto-shutdown: After $AUTO_SHUTDOWN_MINUTES minutes without players"
 }
